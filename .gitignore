@@ -1,0 +1,5 @@
+*.txt
+*.tsv
+*.vscode
+venv/
+.venv/
