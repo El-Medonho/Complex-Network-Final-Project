@@ -32,10 +32,10 @@ int main(int argc, char* argv[]) {
     string languageFilter = "";
     if(argc == 2) {languageFilter = argv[1];}
 
-    unordered_set<string> movie_tconsts;
-    unordered_map<string, string> movie_genres;
-    unordered_map<string, string> movie_regions;
-    unordered_map<string, string> person_birth_year;
+    set<string> movie_tconsts;
+    map<string, string> movie_genres;
+    map<string, string> movie_regions;
+    map<string, string> person_birth_year;
 
     cout << "Accessing title.basics.tsv" << endl;
     ifstream basicsFile("../imdbDataset/title.basics.tsv/title.basics.tsv");
@@ -66,11 +66,9 @@ int main(int argc, char* argv[]) {
                         currentTab = line.find('\t', currentTab + 1);
                 }
                 
-                if (currentTab != string::npos) {
-                    string genres = line.substr(currentTab + 1);
-                    if (!genres.empty() && genres.back() == '\r') genres.pop_back();
-                    movie_genres[tconst] = genres;
-                }
+                string genres = line.substr(currentTab + 1);
+                if (!genres.empty() && genres.back() == '\r') genres.pop_back();
+                movie_genres[tconst] = genres;
             }
         }
     }
@@ -79,6 +77,8 @@ int main(int argc, char* argv[]) {
 
 
     // if arguments were passed, will now filter movies by language. Will also save regions by movie
+
+    map<string,string> original_title;
 
     if (!languageFilter.empty()) {
         toUpper(languageFilter);
@@ -91,7 +91,7 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        unordered_set<string> filtered_movies;
+        set<string> filtered_movies;
         
         getline(akasFile, line);
         
@@ -105,12 +105,14 @@ int main(int argc, char* argv[]) {
             string tconst = line.substr(pos, next_pos - pos);
 
             if(movie_tconsts.find(tconst) == movie_tconsts.end()) continue;
+            if (filtered_movies.find(tconst) != filtered_movies.end()) continue;
 
             pos = next_pos + 1;
             next_pos = line.find('\t', pos);
             
             pos = next_pos + 1;
             next_pos = line.find('\t', pos);
+            string title = line.substr(pos, next_pos - pos);
 
             // gets region
             pos = next_pos + 1;
@@ -118,18 +120,24 @@ int main(int argc, char* argv[]) {
             string region = line.substr(pos, next_pos - pos);
 
             // gets language
-            pos = next_pos + 1;
-            next_pos = line.find('\t', pos);
-            string language = "";
-            if (next_pos != string::npos) {
-                language = line.substr(pos, next_pos - pos);
-            } else {
-                language = line.substr(pos); 
+            pos = next_pos + 1; next_pos = line.find('\t', pos);
+            string language = line.substr(pos, next_pos - pos);
+
+            // gets types
+            pos = next_pos + 1; next_pos = line.find('\t', pos);
+            string types = "";
+            if (next_pos != string::npos) types = line.substr(pos, next_pos - pos);
+            else types = line.substr(pos);
+            
+            if(types.find("original") != string::npos) {
+                original_title[tconst] = title;
+                continue;
             }
+            
             toUpper(region);
             toUpper(language);
 
-            if (region == languageFilter || language == languageFilter) {
+            if ((region == languageFilter || language == languageFilter) && original_title[tconst] == title) {
                 filtered_movies.insert(tconst);
                 
                 if (movie_regions.find(tconst) == movie_regions.end()) {
@@ -139,13 +147,18 @@ int main(int argc, char* argv[]) {
                     movie_regions[tconst] = val;
                 }
             }
-            else movie_genres.erase(tconst);
 
             akasRows++;
             if (akasRows % 1000000 == 0) cout << " -> Akas rows processed: " << akasRows << "\r" << flush;
         }
         akasFile.close();
         cout << endl << " -> Movies remaining after filter: " << filtered_movies.size() << endl;
+
+        map<string, string> new_movie_genres = movie_genres;
+        for(auto[key, val]: movie_genres){
+            if(filtered_movies.find(key) == filtered_movies.end()) new_movie_genres.erase(key);
+        }
+        movie_genres = new_movie_genres;
         
         movie_tconsts = filtered_movies;
     } 
@@ -162,37 +175,44 @@ int main(int argc, char* argv[]) {
                 next_pos = line.find('\t', pos);
                 if (next_pos == string::npos) continue;
                 string tconst = line.substr(pos, next_pos - pos);
-
-                if(movie_tconsts.find(tconst) == movie_tconsts.end()) continue;
-
+                
                 pos = next_pos + 1;
                 next_pos = line.find('\t', pos);
                 
                 pos = next_pos + 1;
                 next_pos = line.find('\t', pos);
-
+                string title = line.substr(pos, next_pos - pos);
+                
                 // gets region
                 pos = next_pos + 1;
                 next_pos = line.find('\t', pos);
                 string region = line.substr(pos, next_pos - pos);
-
+                
                 // gets language
-                pos = next_pos + 1;
-                next_pos = line.find('\t', pos);
-                string language = "";
-                if (next_pos != string::npos) {
-                    language = line.substr(pos, next_pos - pos);
-                } else {
-                    language = line.substr(pos); 
-                }
+                pos = next_pos + 1; next_pos = line.find('\t', pos);
+                string language = line.substr(pos, next_pos - pos);
+                
+                // gets types
+                pos = next_pos + 1; next_pos = line.find('\t', pos);
+                string types = "";
+                if (next_pos != string::npos) types = line.substr(pos, next_pos - pos);
+                else types = line.substr(pos);
                 toUpper(region);
                 toUpper(language);
-
-                string val = "NADA";
-                if (!region.empty() && region != "\\N") val = region;
-                else if (!language.empty() && language != "\\N") val = language;
                 
-                movie_regions[tconst] = val;
+                // As it seems the original region/ language seems to be the last one that has the same title as the original (i guess)
+                if(types.find("original") != string::npos) {
+                    original_title[tconst] = title;
+                    movie_regions[tconst] = "NADA";
+                    continue;
+                }
+
+                if(original_title.find(tconst) == original_title.end() || title == original_title[tconst]){
+                    string val = "NADA";
+                    if (!language.empty() && language != "\\N") val = language;
+                    else if (!region.empty() && region != "\\N") val = region;
+                    movie_regions[tconst] = val;
+                }
                     
                 akasRows++;
                 if (akasRows % 1000000 == 0) cout << " -> Akas rows processed: " << akasRows << "\r" << flush;
@@ -204,8 +224,8 @@ int main(int argc, char* argv[]) {
 
     // will now map movies that each person took part in and their birthday's year
 
-    unordered_map<string, vector<string>> movie_to_people;
-    unordered_map<string, vector<string>> person_to_movies;
+    map<string, vector<string>> movie_to_people;
+    map<string, vector<string>> person_to_movies;
 
     cout << "Accessing title.principals.tsv" << endl;
     ifstream principalsFile("../imdbDataset/title.principals.tsv/title.principals.tsv");
@@ -214,7 +234,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    unordered_set<string> target_categories = {"actor", "actress", "director", "producer"};
+    set<string> target_categories = {"actor", "actress", "director", "producer"};
 
     getline(principalsFile, line);
 
@@ -274,7 +294,7 @@ int main(int argc, char* argv[]) {
 
     cout << "Building network.txt" << endl;
     
-    unordered_map<string, int> edges;
+    map<string, int> edges;
 
     for (auto const& [tconst, people] : movie_to_people) {
         if (people.size() < 2) continue;
@@ -314,8 +334,6 @@ int main(int argc, char* argv[]) {
     }
     personFile.close();
 
-    // --- NOVA LOGICA: Gerar os 3 novos arquivos ---
-
     cout << "Building peopleByBirthYear.txt" << endl;
     ofstream birthFile(prefix + "peopleByBirthYear.txt");
     for (auto const& [nconst, year] : person_birth_year) {
@@ -325,9 +343,7 @@ int main(int argc, char* argv[]) {
 
     cout << "Building genresByMovie.txt" << endl;
     ofstream genreFile(prefix + "genresByMovie.txt");
-    // Itera apenas sobre os filmes finais filtrados
     for (const auto& tconst : movie_tconsts) {
-        // Se tiver genero mapeado, escreve. Se não, escreve \N ou vazio
         string g = (movie_genres.count(tconst)) ? movie_genres[tconst] : "\\N";
         genreFile << tconst << " " << g << "\n";
     }
