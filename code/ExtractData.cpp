@@ -137,6 +137,7 @@ int main(int argc, char* argv[]) {
             toUpper(region);
             toUpper(language);
 
+            // Nasty workaround, will not work everytime
             if ((region == languageFilter || language == languageFilter) && original_title[tconst] == title) {
                 filtered_movies.insert(tconst);
                 
